@@ -8,11 +8,12 @@ The project is intentionally simple: use platform metadata/subtitles first, then
 
 - Input: `job.json`
 - Supported first path: public Instagram/TikTok/YouTube URLs that `yt-dlp` can access
-- Output:
+- Output artifact:
   - `output/result.json`
   - `output/transcript.txt` when subtitles or speech are available
   - up to 8 representative JPG frames
   - diagnostic `yt-dlp.log.txt`
+- Intermediate `video.*` and `audio.wav` are used only during the run and are **not retained in the GitHub Actions artifact**
 - Runtime: GitHub Actions on `ubuntu-latest`
 
 ## Run locally
