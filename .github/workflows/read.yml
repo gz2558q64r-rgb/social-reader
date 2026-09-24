@@ -1,0 +1,48 @@
+name: Read social media
+
+on:
+  push:
+    paths:
+      - "job.json"
+      - "reader.py"
+      - "requirements.txt"
+      - ".github/workflows/read.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Read content
+        run: python reader.py
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: social-reader-result
+          path: output/
+          if-no-files-found: warn
+          retention-days: 3
