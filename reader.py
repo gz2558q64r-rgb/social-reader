@@ -132,7 +132,7 @@ if video:
         ])
         if audio_run["returncode"] == 0 and audio.exists():
             try:
-                model = WhisperModel("small", device="cpu", compute_type="int8")
+                model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
                 segments, info = model.transcribe(str(audio), vad_filter=True)
                 transcript = "\n".join(
                     segment.text.strip() for segment in segments if segment.text.strip()
