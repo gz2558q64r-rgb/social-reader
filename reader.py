@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "output"
 OUT.mkdir(exist_ok=True)
 
+WHISPER_MODEL = "large-v3"
+
 job = json.loads((ROOT / "job.json").read_text(encoding="utf-8"))
 url = job["url"].strip()
 
@@ -61,6 +63,7 @@ result = {
     "author": None,
     "duration": None,
     "transcript_source": None,
+    "whisper_model": None,
     "errors": [],
 }
 
@@ -140,6 +143,7 @@ if video:
                 if transcript:
                     (OUT / "transcript.txt").write_text(transcript, encoding="utf-8")
                     result["transcript_source"] = "faster-whisper"
+                    result["whisper_model"] = WHISPER_MODEL
                     result["method"].append("faster-whisper")
             except Exception as exc:
                 result["errors"].append({"stage": "whisper", "detail": str(exc)})
