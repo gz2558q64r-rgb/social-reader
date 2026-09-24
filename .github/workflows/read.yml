@@ -38,11 +38,15 @@ jobs:
       - name: Read content
         run: python reader.py
 
-      - name: Upload result
+      - name: Upload lightweight result
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: social-reader-result
-          path: output/
+          path: |
+            output/result.json
+            output/transcript.txt
+            output/frame_*.jpg
+            output/yt-dlp.log.txt
           if-no-files-found: warn
           retention-days: 3
