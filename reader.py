@@ -89,7 +89,7 @@ transcript = ""
 # so text-only/image-only posts can otherwise look like "no content".
 if result["platform"] == "x":
     try:
-        match = re.search(r"/status/(\\d+)", url)
+        match = re.search(r"/status/(\d+)", url)
         if match:
             tweet_id = match.group(1)
             req = Request(
