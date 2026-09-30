@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from faster_whisper import WhisperModel
+from youtube_transcript_api import YouTubeTranscriptApi
 
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "output"
@@ -14,6 +15,20 @@ WHISPER_MODEL = "large-v3"
 
 job = json.loads((ROOT / "job.json").read_text(encoding="utf-8"))
 url = job["url"].strip()
+
+def youtube_video_id(value: str):
+    parsed = urlparse(value)
+    host = parsed.netloc.lower()
+    if "youtu.be" in host:
+        return parsed.path.strip("/").split("/")[0] or None
+    if "youtube.com" in host:
+        if parsed.path == "/watch":
+            from urllib.parse import parse_qs
+            return parse_qs(parsed.query).get("v", [None])[0]
+        parts = [p for p in parsed.path.split("/") if p]
+        if len(parts) >= 2 and parts[0] in {"shorts", "embed", "live"}:
+            return parts[1]
+    return None
 
 def platform_from_url(value: str) -> str:
     host = urlparse(value).netloc.lower()
@@ -67,6 +82,29 @@ result = {
     "errors": [],
 }
 
+transcript = ""
+
+if result["platform"] == "youtube":
+    try:
+        video_id = youtube_video_id(url)
+        if video_id:
+            api = YouTubeTranscriptApi()
+            fetched = api.fetch(video_id, languages=["ja", "en"])
+            lines = []
+            for item in fetched:
+                text_value = getattr(item, "text", None)
+                if text_value is None and isinstance(item, dict):
+                    text_value = item.get("text")
+                if text_value:
+                    lines.append(str(text_value).strip())
+            transcript = "\n".join(line for line in lines if line)
+            if transcript.strip():
+                (OUT / "transcript.txt").write_text(transcript, encoding="utf-8")
+                result["transcript_source"] = "youtube-transcript-api"
+                result["method"].append("youtube-transcript-api")
+    except Exception as exc:
+        result["errors"].append({"stage": "youtube-transcript-api", "detail": str(exc)})
+
 ydl = run([
     "yt-dlp",
     "--no-playlist",
@@ -94,7 +132,6 @@ if info_files:
         result["errors"].append({"stage": "info-json", "detail": str(exc)})
 
 subtitle_files = sorted(list(OUT.glob("video*.vtt")) + list(OUT.glob("video*.srt")))
-transcript = ""
 if subtitle_files:
     try:
         raw = subtitle_files[0].read_text(encoding="utf-8", errors="ignore")
