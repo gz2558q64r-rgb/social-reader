@@ -3,6 +3,7 @@ import re
 import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from faster_whisper import WhisperModel
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -85,6 +86,24 @@ result = {
 transcript = ""
 
 if result["platform"] == "youtube":
+    try:
+        video_id = youtube_video_id(url)
+        if video_id:
+            req = Request(
+                f"https://youtube-transcript.ai/transcript/{video_id}.txt?lang=ja",
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            with urlopen(req, timeout=30) as resp:
+                hosted = resp.read().decode("utf-8", errors="replace").strip()
+            if hosted:
+                transcript = hosted
+                (OUT / "transcript.txt").write_text(transcript, encoding="utf-8")
+                result["transcript_source"] = "youtube-transcript.ai"
+                result["method"].append("hosted-transcript")
+    except Exception as exc:
+        result["errors"].append({"stage": "hosted-transcript", "detail": str(exc)})
+
+if result["platform"] == "youtube" and not transcript.strip():
     try:
         video_id = youtube_video_id(url)
         if video_id:
