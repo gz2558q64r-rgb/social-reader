@@ -85,6 +85,43 @@ result = {
 
 transcript = ""
 
+# X text/image fallback. yt-dlp's Twitter extractor focuses on playable media,
+# so text-only/image-only posts can otherwise look like "no content".
+if result["platform"] == "x":
+    try:
+        match = re.search(r"/status/(\\d+)", url)
+        if match:
+            tweet_id = match.group(1)
+            req = Request(
+                f"https://api.fxtwitter.com/status/{tweet_id}",
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            with urlopen(req, timeout=30) as resp:
+                fx_data = json.loads(resp.read().decode("utf-8", errors="replace"))
+            tweet = fx_data.get("tweet") or {}
+            text_value = (tweet.get("text") or "").strip()
+            if text_value:
+                result["text"] = text_value
+                result["title"] = text_value
+            author = tweet.get("author") or {}
+            result["author"] = (
+                author.get("name")
+                or author.get("screen_name")
+                or result.get("author")
+            )
+            media = tweet.get("media") or {}
+            photos = media.get("photos") or []
+            for idx, photo in enumerate(photos[:8], start=1):
+                photo_url = photo.get("url") if isinstance(photo, dict) else None
+                if not photo_url:
+                    continue
+                image_req = Request(photo_url, headers={"User-Agent": "Mozilla/5.0"})
+                with urlopen(image_req, timeout=30) as image_resp:
+                    (OUT / f"frame_{idx:02d}.jpg").write_bytes(image_resp.read())
+            result["method"].append("fxtwitter-api")
+    except Exception as exc:
+        result["errors"].append({"stage": "fxtwitter-api", "detail": str(exc)})
+
 if result["platform"] == "youtube":
     try:
         video_id = youtube_video_id(url)
