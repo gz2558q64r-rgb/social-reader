@@ -1,0 +1,145 @@
+name: tmp-read-2ubs7eHup1k
+
+on:
+  push:
+    branches:
+      - tmp/read-2ubs7eHup1k-20261015
+
+permissions:
+  contents: read
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VIDEO_ID: 2ubs7eHup1k
+      VIDEO_URL: https://www.youtube.com/watch?v=2ubs7eHup1k
+    steps:
+      - name: Install tools
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install -q -U 'yt-dlp[default,curl-cffi]' faster-whisper 'av<19'
+          node --version
+          yt-dlp --version
+
+      - name: Fetch metadata and media
+        shell: bash
+        run: |
+          set +e
+          mkdir -p output
+          python - <<'PY'
+          import json, os, urllib.parse, urllib.request
+          url='https://www.youtube.com/oembed?'+urllib.parse.urlencode({'url':os.environ['VIDEO_URL'],'format':'json'})
+          try:
+              req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+              with urllib.request.urlopen(req,timeout=20) as r:
+                  data=json.loads(r.read().decode('utf-8','replace'))
+              open('output/oembed.json','w',encoding='utf-8').write(json.dumps(data,ensure_ascii=False,indent=2))
+              print(data)
+          except Exception as e:
+              open('output/oembed-error.txt','w',encoding='utf-8').write(repr(e))
+          PY
+
+          common=(
+            --no-playlist
+            --js-runtimes node
+            --remote-components ejs:github
+            --write-info-json
+            --write-subs
+            --write-auto-subs
+            --sub-langs 'ja.*,en.*'
+            --sub-format vtt
+            --restrict-filenames
+            -o 'output/video.%(ext)s'
+          )
+
+          yt-dlp "${common[@]}" --impersonate chrome "$VIDEO_URL" >output/yt-dlp-1.log 2>&1
+          s1=$?
+          if [ "$s1" -ne 0 ]; then
+            yt-dlp "${common[@]}" --impersonate chrome --extractor-args 'youtube:player_client=android_vr,tv_embedded,web_creator' "$VIDEO_URL" >output/yt-dlp-2.log 2>&1
+            s2=$?
+          else
+            s2=0
+          fi
+          if [ "$s1" -ne 0 ] && [ "$s2" -ne 0 ]; then
+            yt-dlp "${common[@]}" --extractor-args 'youtube:player_client=mweb,web_safari,tv' "$VIDEO_URL" >output/yt-dlp-3.log 2>&1
+            s3=$?
+          else
+            s3=0
+          fi
+          echo "attempt1=$s1 attempt2=$s2 attempt3=$s3" | tee output/status.txt
+          exit 0
+
+      - name: Build transcript and frames
+        shell: bash
+        run: |
+          set +e
+          python - <<'PY'
+          import glob, html, json, os, re, subprocess
+          from pathlib import Path
+
+          out=Path('output')
+          transcript=''
+          vtts=sorted(out.glob('video*.vtt'))
+          if vtts:
+              raw=vtts[0].read_text(encoding='utf-8',errors='replace').splitlines()
+              lines=[]; last=None
+              for line in raw:
+                  s=line.strip()
+                  if not s or s.startswith(('WEBVTT','Kind:','Language:','NOTE')): continue
+                  if '-->' in s or re.fullmatch(r'\d+',s): continue
+                  s=html.unescape(re.sub(r'<[^>]+>','',s)).strip()
+                  if s and s!=last:
+                      lines.append(s); last=s
+              transcript='\n'.join(lines).strip()
+              if transcript:
+                  (out/'transcript.txt').write_text(transcript+'\n',encoding='utf-8')
+                  (out/'transcript-source.txt').write_text('platform subtitles\n',encoding='utf-8')
+
+          media=[]
+          for p in out.glob('video.*'):
+              if p.suffix.lower() not in {'.json','.vtt','.srt','.part','.ytdl'}:
+                  media.append(p)
+          video=media[0] if media else None
+          if video:
+              subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-i',str(video),'-vf',"fps=1/20,scale='min(960,iw)':-2",'-frames:v','8',str(out/'frame_%02d.jpg')])
+              if not transcript:
+                  audio=out/'audio.wav'
+                  ar=subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-i',str(video),'-vn','-ac','1','-ar','16000',str(audio)])
+                  if ar.returncode==0 and audio.exists():
+                      try:
+                          from faster_whisper import WhisperModel
+                          model=WhisperModel('large-v3',device='cpu',compute_type='int8')
+                          segments,info=model.transcribe(str(audio),vad_filter=False)
+                          transcript='\n'.join(s.text.strip() for s in segments if s.text.strip())
+                          if transcript:
+                              (out/'transcript.txt').write_text(transcript+'\n',encoding='utf-8')
+                              (out/'transcript-source.txt').write_text('faster-whisper large-v3\n',encoding='utf-8')
+                      except Exception as e:
+                          (out/'whisper-error.txt').write_text(repr(e),encoding='utf-8')
+
+          summary={
+              'video_id':os.environ['VIDEO_ID'],
+              'video_found':bool(video),
+              'subtitle_files':[p.name for p in vtts],
+              'transcript_found':(out/'transcript.txt').exists(),
+              'frame_count':len(list(out.glob('frame_*.jpg'))),
+          }
+          if (out/'oembed.json').exists():
+              try: summary['oembed']=json.loads((out/'oembed.json').read_text(encoding='utf-8'))
+              except Exception: pass
+          (out/'result.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8')
+          print(json.dumps(summary,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: social-reader-result-2ubs7eHup1k
+          path: output/
+          if-no-files-found: error
+          retention-days: 3
