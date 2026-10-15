@@ -35,6 +35,36 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      - name: Detect YouTube target
+        id: target
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          from urllib.parse import urlparse
+
+          job = json.loads(Path("job.json").read_text(encoding="utf-8"))
+          host = urlparse(job.get("url", "").strip()).netloc.lower()
+          is_youtube = "youtube.com" in host or "youtu.be" in host
+          print(f"youtube={'true' if is_youtube else 'false'}")
+          PY
+
+      - name: Enable Cloudflare WARP for YouTube
+        if: steps.target.outputs.youtube == 'true'
+        uses: fscarmen/warp-on-actions@v1.4
+        with:
+          stack: dual
+          mode: client
+
+      - name: Verify WARP
+        if: steps.target.outputs.youtube == 'true'
+        shell: bash
+        run: |
+          trace="$(curl -fsS https://www.cloudflare.com/cdn-cgi/trace)"
+          printf '%s\n' "$trace"
+          grep -q '^warp=on$' <<< "$trace"
+
       - name: Read content
         run: python reader.py
 
