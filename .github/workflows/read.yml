@@ -65,6 +65,30 @@ jobs:
           printf '%s\n' "$trace"
           grep -q '^warp=on$' <<< "$trace"
 
+      - name: Probe YouTube oEmbed
+        if: steps.target.outputs.youtube == 'true'
+        shell: bash
+        run: |
+          mkdir -p output
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+
+          url = json.loads(Path("job.json").read_text(encoding="utf-8"))["url"].strip()
+          endpoint = "https://www.youtube.com/oembed?" + urlencode({"url": url, "format": "json"})
+          try:
+              req = Request(endpoint, headers={"User-Agent": "Mozilla/5.0"})
+              with urlopen(req, timeout=30) as resp:
+                  body = resp.read().decode("utf-8", errors="replace")
+              Path("output/oembed.json").write_text(body, encoding="utf-8")
+              print(body)
+          except Exception as exc:
+              Path("output/oembed.json").write_text(json.dumps({"error": str(exc)}, ensure_ascii=False), encoding="utf-8")
+              print(repr(exc))
+          PY
+
       - name: Read content
         run: python reader.py
 
@@ -78,5 +102,6 @@ jobs:
             output/transcript.txt
             output/frame_*.jpg
             output/yt-dlp.log.txt
+            output/oembed.json
           if-no-files-found: warn
           retention-days: 3
