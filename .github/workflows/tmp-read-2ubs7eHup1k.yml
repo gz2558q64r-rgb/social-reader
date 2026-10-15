@@ -16,6 +16,20 @@ jobs:
       VIDEO_ID: 2ubs7eHup1k
       VIDEO_URL: https://www.youtube.com/watch?v=2ubs7eHup1k
     steps:
+      - name: Enable Cloudflare WARP
+        uses: fscarmen/warp-on-actions@v1.4
+        with:
+          stack: dual
+          mode: client
+
+      - name: Verify egress
+        shell: bash
+        run: |
+          set +e
+          curl -fsS https://www.cloudflare.com/cdn-cgi/trace | tee /tmp/cloudflare-trace.txt
+          echo "IPv4: $(curl -4 -fsS https://api.ipify.org || true)"
+          echo "IPv6: $(curl -6 -fsS https://api64.ipify.org || true)"
+
       - name: Install tools
         shell: bash
         run: |
@@ -30,6 +44,7 @@ jobs:
         run: |
           set +e
           mkdir -p output
+          cp /tmp/cloudflare-trace.txt output/cloudflare-trace.txt 2>/dev/null || true
           python - <<'PY'
           import json, os, urllib.parse, urllib.request
           url='https://www.youtube.com/oembed?'+urllib.parse.urlencode({'url':os.environ['VIDEO_URL'],'format':'json'})
