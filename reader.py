@@ -70,6 +70,14 @@ def clean_vtt(text: str) -> str:
             lines.append(line)
     return "\n".join(lines)
 
+def subtitle_sort_key(path: Path):
+    name = path.name.lower()
+    if ".ja" in name:
+        return (0, name)
+    if ".en" in name:
+        return (1, name)
+    return (2, name)
+
 result = {
     "url": url,
     "platform": platform_from_url(url),
@@ -161,21 +169,59 @@ if result["platform"] == "youtube" and not transcript.strip():
     except Exception as exc:
         result["errors"].append({"stage": "youtube-transcript-api", "detail": str(exc)})
 
-ydl = run([
+ydl_common = [
     "yt-dlp",
     "--no-playlist",
     "--write-info-json",
     "--write-subs",
     "--write-auto-subs",
-    "--sub-langs", "ja.*,en.*",
     "--sub-format", "vtt",
     "--restrict-filenames",
     "-o", str(OUT / "video.%(ext)s"),
-    url,
-])
-result["method"].append("yt-dlp")
-if ydl["returncode"] != 0:
-    result["errors"].append({"stage": "yt-dlp", "detail": ydl["stderr"]})
+]
+
+ydl_runs = []
+if result["platform"] == "youtube":
+    # Keep Japanese and English subtitle requests independent. A failure or
+    # rate-limit on English must not invalidate an already successful Japanese
+    # subtitle/media download.
+    ydl = run(ydl_common + ["--sub-langs", "ja.*", url])
+    ydl_runs.append(("yt-dlp-ja", ydl))
+    result["method"].append("yt-dlp-ja")
+
+    ja_subtitles = sorted(
+        list(OUT.glob("video*.ja*.vtt")) + list(OUT.glob("video*.ja*.srt")),
+        key=subtitle_sort_key,
+    )
+    if not ja_subtitles:
+        ydl_en = run([
+            "yt-dlp",
+            "--no-playlist",
+            "--skip-download",
+            "--write-subs",
+            "--write-auto-subs",
+            "--sub-langs", "en.*",
+            "--sub-format", "vtt",
+            "--restrict-filenames",
+            "-o", str(OUT / "video.%(ext)s"),
+            url,
+        ])
+        ydl_runs.append(("yt-dlp-en-fallback", ydl_en))
+        result["method"].append("yt-dlp-en-fallback")
+
+    if ydl["returncode"] != 0 and not ja_subtitles:
+        result["errors"].append({"stage": "yt-dlp-ja", "detail": ydl["stderr"]})
+    if ydl_runs[-1][0] == "yt-dlp-en-fallback" and ydl_runs[-1][1]["returncode"] != 0:
+        result["errors"].append({
+            "stage": "yt-dlp-en-fallback",
+            "detail": ydl_runs[-1][1]["stderr"],
+        })
+else:
+    ydl = run(ydl_common + ["--sub-langs", "ja.*,en.*", url])
+    ydl_runs.append(("yt-dlp", ydl))
+    result["method"].append("yt-dlp")
+    if ydl["returncode"] != 0:
+        result["errors"].append({"stage": "yt-dlp", "detail": ydl["stderr"]})
 
 info_files = list(OUT.glob("video.info.json"))
 if info_files:
@@ -187,7 +233,10 @@ if info_files:
     except Exception as exc:
         result["errors"].append({"stage": "info-json", "detail": str(exc)})
 
-subtitle_files = sorted(list(OUT.glob("video*.vtt")) + list(OUT.glob("video*.srt")))
+subtitle_files = sorted(
+    list(OUT.glob("video*.vtt")) + list(OUT.glob("video*.srt")),
+    key=subtitle_sort_key,
+)
 if subtitle_files:
     try:
         raw = subtitle_files[0].read_text(encoding="utf-8", errors="ignore")
@@ -254,8 +303,16 @@ result["status"] = "success" if (
     json.dumps(result, ensure_ascii=False, indent=2),
     encoding="utf-8",
 )
+
+log_parts = []
+for label, ydl_result in ydl_runs:
+    log_parts.append(
+        f"## {label}\n"
+        + "STDOUT\n" + ydl_result["stdout"]
+        + "\n\nSTDERR\n" + ydl_result["stderr"]
+    )
 (OUT / "yt-dlp.log.txt").write_text(
-    "STDOUT\n" + ydl["stdout"] + "\n\nSTDERR\n" + ydl["stderr"],
+    "\n\n".join(log_parts),
     encoding="utf-8",
 )
 
