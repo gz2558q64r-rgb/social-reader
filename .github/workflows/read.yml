@@ -2,9 +2,11 @@ name: Read social media
 
 on:
   push:
+    branches: [main]
     paths:
       - "job.json"
       - "reader.py"
+      - "whisper_worker.py"
       - "requirements.txt"
       - ".github/workflows/read.yml"
   workflow_dispatch:
@@ -15,7 +17,7 @@ permissions:
 jobs:
   read:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
