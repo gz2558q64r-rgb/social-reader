@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   read:
@@ -82,3 +82,23 @@ jobs:
             output/yt-dlp.log.txt
           if-no-files-found: warn
           retention-days: 3
+
+      - name: Export verification text for Social Reader
+        if: always()
+        shell: bash
+        run: |
+          set -eu
+          if [ ! -f output/result.json ]; then
+            echo "No result file to export"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="reader-verify-${GITHUB_RUN_ID}"
+          git switch -c "$branch"
+          git add -f output/result.json
+          if [ -f output/transcript.txt ]; then
+            git add -f output/transcript.txt
+          fi
+          git commit -m "Store video verification result for run ${GITHUB_RUN_ID}"
+          git push origin "HEAD:refs/heads/$branch"
