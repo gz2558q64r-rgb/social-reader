@@ -1,0 +1,25 @@
+{
+  "url": "https://youtu.be/a469QUpSUko?si=Bcgl2C_0fuClYAup",
+  "platform": "youtube",
+  "status": "success",
+  "method": [
+    "youtube-transcript-api",
+    "yt-dlp-ja",
+    "subtitles",
+    "ffmpeg"
+  ],
+  "title": "地球全体が範囲の宝探し｢ジオキャッシング｣だと？",
+  "author": "東海オンエア",
+  "duration": 909,
+  "transcript_source": "platform_subtitles",
+  "whisper_model": null,
+  "errors": [
+    {
+      "stage": "hosted-transcript",
+      "detail": "HTTP Error 401: Unauthorized"
+    }
+  ],
+  "video_found": true,
+  "frame_count": 8,
+  "transcript_found": true
+}
