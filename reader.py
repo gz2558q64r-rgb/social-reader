@@ -88,6 +88,7 @@ def subtitle_sort_key(path: Path):
 def main():
     job = json.loads((ROOT / "job.json").read_text(encoding="utf-8"))
     url = job["url"].strip()
+    whisper_model = job.get("whisper_model", WHISPER_MODEL)
 
     result = {
         "url": url,
@@ -200,13 +201,13 @@ def main():
             whisper_out = OUT / "whisper-transcript.txt"
             whisper = run([
                 sys.executable, str(ROOT / "whisper_worker.py"),
-                str(audio), str(whisper_out), WHISPER_MODEL,
+                str(audio), str(whisper_out), whisper_model,
             ], timeout=WHISPER_TIMEOUT_SECONDS)
             if whisper["returncode"] == 0 and whisper_out.exists():
                 transcript = whisper_out.read_text(encoding="utf-8").strip()
             if transcript:
                 result["transcript_source"] = "faster-whisper"
-                result["whisper_model"] = WHISPER_MODEL
+                result["whisper_model"] = whisper_model
                 result["method"].append("faster-whisper")
             else:
                 result["errors"].append({
