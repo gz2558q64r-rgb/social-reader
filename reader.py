@@ -166,6 +166,8 @@ def main():
             result["title"] = info.get("title") or info.get("description")
             result["author"] = info.get("uploader") or info.get("channel")
             result["duration"] = info.get("duration")
+            result["resolved_url"] = info.get("webpage_url")
+            result["video_id"] = info.get("id")
         except Exception as exc:
             result["errors"].append({"stage": "info-json", "detail": str(exc)})
 

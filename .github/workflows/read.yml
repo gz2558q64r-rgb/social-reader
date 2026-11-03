@@ -48,7 +48,7 @@ jobs:
 
           job = json.loads(Path("job.json").read_text(encoding="utf-8"))
           host = urlparse(job.get("url", "").strip()).netloc.lower()
-          is_youtube = "youtube.com" in host or "youtu.be" in host
+          is_youtube = "youtube.com" in host or "youtu.be" in host or job.get("url", "").strip().startswith("ytsearch")
           print(f"youtube={'true' if is_youtube else 'false'}")
           PY
 
@@ -69,6 +69,13 @@ jobs:
 
       - name: Read content
         run: python reader.py
+
+      - name: Output public video transcript for review
+        if: always()
+        shell: bash
+        run: |
+          cat output/result.json || true
+          if [ -f output/transcript.txt ]; then head -c 25000 output/transcript.txt; fi
 
       - name: Upload lightweight result
         if: always()
