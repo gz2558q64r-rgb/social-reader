@@ -1,0 +1,33 @@
+name: Inspect Civitai video (temporary)
+on:
+  push:
+    branches:
+      - civitai-view-147408536
+    paths:
+      - ".github/workflows/civitai-inspect.yml"
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Download and inspect the user-linked clip
+        run: |
+          python3 - <<'PY'
+          import urllib.request,subprocess,base64,json,os
+          url='https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/0fd07c38-4026-4aeb-88d2-3dc8634abaed/original=true/0fd07c38-4026-4aeb-88d2-3dc8634abaed.mp4'
+          req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+          with urllib.request.urlopen(req,timeout=45) as s, open('/tmp/clip.mp4','wb') as f:
+            import shutil
+            shutil.copyfileobj(s,f)
+          print('DOWNLOAD_BYTES',os.stat('/tmp/clip.mp4').st_size,flush=True)
+          p=subprocess.run(['ffprobe','-v','quiet','-show_format','-of','json','/tmp/clip.mp4'],capture_output=True,text=True,check=True)
+          d=float(json.loads(p.stdout)['format']['duration'])
+          print('DURATION_SECONDS',d,flush=True)
+          for i,frac in enumerate((0.06,0.27,0.52,0.76,0.94)):
+            t=d*frac
+            p=subprocess.run(['ffmpeg','-loglevel','error','-ss',str(t),'-i','/tmp/clip.mp4','-frames:v','1','-vf','scale=320:-2','-q:v','7','-f','image2pipe','-vcodec','mjpeg','-'],capture_output=True,check=True)
+            print('FRAME_'+str(i)+'_TIME',round(t,2),flush=True)
+            print('FRAME_'+str(i)+'_BASE64 '+base64.b64encode(p.stdout).decode(),flush=True)
+          PY
