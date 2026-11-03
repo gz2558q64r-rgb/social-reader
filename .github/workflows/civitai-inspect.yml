@@ -27,13 +27,15 @@ jobs:
           p=subprocess.run(['ffprobe','-v','quiet','-show_format','-of','json','/tmp/clip.mp4'],capture_output=True,text=True,check=True)
           duration=float(json.loads(p.stdout)['format']['duration'])
           print('DURATION',duration,flush=True)
-          for start,end,fps in [(0,5,10),(5,duration,10),(7,duration,15)]:
+          for start,end,fps in [(5,duration,10),(7,duration,15)]:
             n=round((end-start)*fps)
             frames=[]
             for i in range(n):
               t=min(duration-0.06,start+(i+0.5)/fps)
               cmd=['ffmpeg','-loglevel','error','-ss',str(t),'-i','/tmp/clip.mp4','-frames:v','1','-vf','scale=168:-2','-q:v','6','-f','image2pipe','-vcodec','mjpeg','-']
               p=subprocess.run(cmd,capture_output=True,check=True)
+              if not p.stdout:
+                continue
               im=Image.open(io.BytesIO(p.stdout)).convert('RGB')
               frames.append((im,t))
             cols=10 if start<7 else 8
