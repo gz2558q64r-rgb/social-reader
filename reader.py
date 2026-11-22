@@ -148,6 +148,7 @@ def main():
     ydl_common = [
         "yt-dlp",
         "--no-playlist",
+        "--js-runtimes", "node",
         "--write-info-json",
         "--restrict-filenames",
         "-o", str(OUT / "video.%(ext)s"),
@@ -158,6 +159,17 @@ def main():
     result["method"].append("yt-dlp-media")
     if ydl["returncode"] != 0:
         result["errors"].append({"stage": "yt-dlp-media", "detail": ydl["stderr"]})
+        if result["platform"] == "youtube":
+            # Try a second YouTube player client when the default client is rejected.
+            alt = run(ydl_common + [
+                "--extractor-args", "youtube:player_client=web_safari", url,
+            ])
+            ydl_runs.append(("yt-dlp-web-safari", alt))
+            result["method"].append("yt-dlp-web-safari")
+            if alt["returncode"] != 0:
+                result["errors"].append({
+                    "stage": "yt-dlp-web-safari", "detail": alt["stderr"],
+                })
 
     info_files = list(OUT.glob("video.info.json"))
     if info_files:
@@ -188,6 +200,19 @@ def main():
         if frames["returncode"] != 0:
             result["errors"].append({"stage": "frames", "detail": frames["stderr"]})
 
+        # Preserve the source sample rate/channel count in a full-quality PCM WAV.
+        listening_wav = OUT / "audio.wav"
+        listening_run = run([
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            "-i", str(video), "-vn", "-c:a", "pcm_s16le",
+            str(listening_wav),
+        ])
+        if listening_run["returncode"] != 0 or not listening_wav.exists():
+            result["errors"].append({
+                "stage": "audio-wav",
+                "detail": listening_run["stderr"] or "WAV extraction failed",
+            })
+
         # Retain an MP3 artifact for direct listening, independently of Whisper.
         mp3 = OUT / "audio.mp3"
         mp3_run = run([
@@ -203,7 +228,7 @@ def main():
 
         # Whisper large-v3 is the primary recognizer; subtitle availability
         # must never suppress this attempt.
-        audio = OUT / "audio.wav"
+        audio = OUT / "whisper-audio.wav"
         audio_run = run([
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
             "-i", str(video), "-vn", "-ac", "1", "-ar", "16000",
@@ -259,6 +284,7 @@ def main():
             result["transcription_attempts"].append(label)
             subtitles = run([
                 "yt-dlp", "--no-playlist", "--skip-download",
+                "--js-runtimes", "node",
                 "--write-subs", "--write-auto-subs",
                 "--sub-langs", language, "--sub-format", "vtt",
                 "--restrict-filenames",
@@ -304,10 +330,11 @@ def main():
 
     result["video_found"] = bool(video)
     result["mp3_found"] = (OUT / "audio.mp3").is_file() and (OUT / "audio.mp3").stat().st_size > 0
+    result["wav_found"] = (OUT / "audio.wav").is_file() and (OUT / "audio.wav").stat().st_size > 0
     result["frame_count"] = len(list(OUT.glob("frame_*.jpg")))
     result["transcript_found"] = bool((OUT / "transcript.txt").exists())
     result["status"] = "success" if (
-        result["mp3_found"] or result["transcript_found"] or result["frame_count"] > 0 or result["title"]
+        result["mp3_found"] or result["wav_found"] or result["transcript_found"] or result["frame_count"] > 0 or result["title"]
     ) else "no_content"
 
     (OUT / "result.json").write_text(
@@ -328,6 +355,8 @@ def main():
     )
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    if result["status"] == "no_content":
+        raise SystemExit("No usable content extracted; see output/result.json and yt-dlp.log.txt")
 
 
 if __name__ == "__main__":
