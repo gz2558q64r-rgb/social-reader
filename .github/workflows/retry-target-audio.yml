@@ -1,0 +1,92 @@
+name: Retry target YouTube audio (temporary)
+
+on:
+  schedule:
+    # At most one retry every 4 hours; avoid hammering YouTube after HTTP 429.
+    - cron: "23 */4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine whether another attempt is needed
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import io
+          import json
+          import os
+          import zipfile
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          video_id = "GLFiXlCckUo"
+          cutoff = datetime(2026, 11, 25, 9, 25, tzinfo=timezone.utc)
+          start = datetime(2026, 11, 22, 9, 14, tzinfo=timezone.utc)
+          url = json.loads(Path("job.json").read_text(encoding="utf-8")).get("url", "")
+          if datetime.now(timezone.utc) >= cutoff or video_id not in url:
+              print("retry=false")
+              print("disable=true")
+              raise SystemExit(0)
+
+          repository = os.environ["REPOSITORY"]
+          headers = {
+              "Authorization": "Bearer " + os.environ["GH_TOKEN"],
+              "Accept": "application/vnd.github+json",
+              "User-Agent": "social-reader-retry",
+          }
+          api = f"https://api.github.com/repos/{repository}/actions/artifacts?name=social-reader-result&per_page=100"
+          with urlopen(Request(api, headers=headers), timeout=30) as response:
+              artifacts = json.load(response).get("artifacts", [])
+
+          found = False
+          for artifact in artifacts:
+              if artifact.get("expired"):
+                  continue
+              when = datetime.fromisoformat(artifact["created_at"].replace("Z", "+00:00"))
+              if when < start or artifact.get("size_in_bytes", 0) < 10000:
+                  continue
+              download_url = artifact.get("archive_download_url")
+              if not download_url:
+                  continue
+              with urlopen(Request(download_url, headers=headers), timeout=60) as response:
+                  raw = response.read(150 * 1024 * 1024 + 1)
+              if len(raw) > 150 * 1024 * 1024:
+                  raise RuntimeError("Audio artifact ZIP too large to inspect safely")
+              with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                  found = any(
+                      item.filename.rsplit("/", 1)[-1] in ("audio.mp3", "audio_hifi.wav")
+                      and item.file_size > 0
+                      for item in archive.infolist()
+                  )
+              if found:
+                  break
+
+          print(f"retry={'false' if found else 'true'}")
+          print(f"disable={'true' if found else 'false'}")
+          PY
+
+      - name: Dispatch one extraction attempt
+        if: steps.gate.outputs.retry == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run read.yml --ref main
+
+      - name: Stop temporary scheduled retries
+        if: steps.gate.outputs.disable == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/retry-target-audio.yml/disable"
