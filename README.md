@@ -11,9 +11,10 @@ The project prioritizes local `faster-whisper` **large-v3** speech recognition. 
 - Output artifact:
   - `output/result.json`
   - `output/transcript.txt` when subtitles or speech are available
+  - `output/audio.mp3` (192 kbps) when audio can be extracted from the video
   - up to 8 representative JPG frames
   - diagnostic `yt-dlp.log.txt`
-- Intermediate `video.*` and `audio.wav` are used only during the run and are **not retained in the GitHub Actions artifact**
+- Intermediate `video.*` and `audio.wav` are used only during the run and are **not retained in the GitHub Actions artifact**. The MP3 is retained for 3 days as part of the artifact.
 - Runtime: GitHub Actions on `ubuntu-latest`
 
 ## Run locally

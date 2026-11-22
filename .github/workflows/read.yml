@@ -78,6 +78,7 @@ jobs:
           path: |
             output/result.json
             output/transcript.txt
+            output/audio.mp3
             output/frame_*.jpg
             output/yt-dlp.log.txt
           if-no-files-found: warn

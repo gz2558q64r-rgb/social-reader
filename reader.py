@@ -188,6 +188,19 @@ def main():
         if frames["returncode"] != 0:
             result["errors"].append({"stage": "frames", "detail": frames["stderr"]})
 
+        # Retain an MP3 artifact for direct listening, independently of Whisper.
+        mp3 = OUT / "audio.mp3"
+        mp3_run = run([
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            "-i", str(video), "-vn", "-codec:a", "libmp3lame",
+            "-b:a", "192k", str(mp3),
+        ])
+        if mp3_run["returncode"] != 0 or not mp3.exists():
+            result["errors"].append({
+                "stage": "audio-mp3",
+                "detail": mp3_run["stderr"] or "MP3 extraction failed",
+            })
+
         # Whisper large-v3 is the primary recognizer; subtitle availability
         # must never suppress this attempt.
         audio = OUT / "audio.wav"
@@ -290,10 +303,11 @@ def main():
         (OUT / "transcript.txt").write_text(transcript, encoding="utf-8")
 
     result["video_found"] = bool(video)
+    result["mp3_found"] = (OUT / "audio.mp3").is_file() and (OUT / "audio.mp3").stat().st_size > 0
     result["frame_count"] = len(list(OUT.glob("frame_*.jpg")))
     result["transcript_found"] = bool((OUT / "transcript.txt").exists())
     result["status"] = "success" if (
-        result["transcript_found"] or result["frame_count"] > 0 or result["title"]
+        result["mp3_found"] or result["transcript_found"] or result["frame_count"] > 0 or result["title"]
     ) else "no_content"
 
     (OUT / "result.json").write_text(
