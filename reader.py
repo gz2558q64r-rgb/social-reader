@@ -201,7 +201,7 @@ def main():
             result["errors"].append({"stage": "frames", "detail": frames["stderr"]})
 
         # Preserve the source sample rate/channel count in a full-quality PCM WAV.
-        listening_wav = OUT / "audio.wav"
+        listening_wav = OUT / "audio_hifi.wav"
         listening_run = run([
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
             "-i", str(video), "-vn", "-c:a", "pcm_s16le",
@@ -228,7 +228,7 @@ def main():
 
         # Whisper large-v3 is the primary recognizer; subtitle availability
         # must never suppress this attempt.
-        audio = OUT / "whisper-audio.wav"
+        audio = OUT / "audio.wav"
         audio_run = run([
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
             "-i", str(video), "-vn", "-ac", "1", "-ar", "16000",
@@ -330,7 +330,7 @@ def main():
 
     result["video_found"] = bool(video)
     result["mp3_found"] = (OUT / "audio.mp3").is_file() and (OUT / "audio.mp3").stat().st_size > 0
-    result["wav_found"] = (OUT / "audio.wav").is_file() and (OUT / "audio.wav").stat().st_size > 0
+    result["wav_found"] = (OUT / "audio_hifi.wav").is_file() and (OUT / "audio_hifi.wav").stat().st_size > 0
     result["frame_count"] = len(list(OUT.glob("frame_*.jpg")))
     result["transcript_found"] = bool((OUT / "transcript.txt").exists())
     result["status"] = "success" if (

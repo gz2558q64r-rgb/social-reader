@@ -12,10 +12,10 @@ The project prioritizes local `faster-whisper` **large-v3** speech recognition. 
   - `output/result.json`
   - `output/transcript.txt` when subtitles or speech are available
   - `output/audio.mp3` (192 kbps) when audio can be extracted from the video
-  - `output/audio.wav` (PCM 16-bit, original sample rate/channels) for high-fidelity editing
+  - `output/audio_hifi.wav` (PCM 16-bit, original sample rate/channels) for high-fidelity editing
   - up to 8 representative JPG frames
   - diagnostic `yt-dlp.log.txt`
-- Intermediate `video.*` and `whisper-audio.wav` are used only during the run and are **not retained in the GitHub Actions artifact**. MP3 and WAV are retained for 3 days.
+- Intermediate `video.*` and `audio.wav` are used only during the run and are **not retained in the GitHub Actions artifact**. MP3 and WAV are retained for 3 days.
 - Runtime: GitHub Actions on `ubuntu-latest` with Node.js 22 for YouTube JS challenges
 - When no usable content is extracted, the reader job exits with a failure while still uploading diagnostic logs.
 
